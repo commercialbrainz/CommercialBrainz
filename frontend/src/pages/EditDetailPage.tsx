@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth, isMod } from "../auth";
-import { api } from "../api";
+import { api, type Edit } from "../api";
 import BrandMetadataDiff, { hasMetadataChanges } from "../components/BrandMetadataDiff";
 import BrandLogoMetadataDiff, { hasLogoMetadataChanges } from "../components/BrandLogoMetadataDiff";
 import BrandLogoImage from "../components/BrandLogoImage";
@@ -22,15 +22,20 @@ export default function EditDetailPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
   const [voteComment, setVoteComment] = useState("");
-  const justSubmittedMessage =
-    (location.state as { justSubmitted?: boolean; message?: string } | null)?.justSubmitted
-      ? (location.state as { message?: string }).message
-      : null;
+  const locationState = location.state as {
+    justSubmitted?: boolean;
+    message?: string;
+    edit?: Edit;
+  } | null;
+  const justSubmittedMessage = locationState?.justSubmitted ? locationState.message : null;
+  const submittedEdit =
+    locationState?.edit && locationState.edit.id === id ? locationState.edit : undefined;
 
-  const { data: edit, isLoading } = useQuery({
+  const { data: edit, isLoading, error: loadError } = useQuery({
     queryKey: ["edit", id],
     queryFn: () => api.getEdit(id!),
     enabled: !!id,
+    placeholderData: submittedEdit,
     refetchInterval: (query) => {
       const fp = query.state.data?.fingerprint_preview;
       if (query.state.data?.status === "open" && fp?.status !== "completed" && fp?.status !== "failed") {
@@ -58,12 +63,16 @@ export default function EditDetailPage() {
     }
   };
 
-  if (isLoading) return <p className="muted">Loading...</p>;
-  if (!edit) return null;
+  if (isLoading && !edit) return <p className="muted">Loading...</p>;
+  if (loadError && !edit) {
+    return <p className="error">{(loadError as Error).message || "Could not load this edit."}</p>;
+  }
+  if (!edit) return <p className="muted">Edit not found.</p>;
 
-  const yesVotes = edit.votes.filter((v) => v.choice === "yes").length;
-  const noVotes = edit.votes.filter((v) => v.choice === "no").length;
-  const viewerVote = user ? edit.votes.find((v) => v.voter_id === user.id) : undefined;
+  const votes = edit.votes ?? [];
+  const yesVotes = votes.filter((v) => v.choice === "yes").length;
+  const noVotes = votes.filter((v) => v.choice === "no").length;
+  const viewerVote = user ? votes.find((v) => v.voter_id === user.id) : undefined;
   const fp = edit.fingerprint_preview;
   const brandEditId = edit.after_state.brand_edit_id as string | undefined;
   const viewerIsMod = isMod(user);
@@ -408,10 +417,10 @@ export default function EditDetailPage() {
         </pre>
       </div>
 
-      {edit.votes.length > 0 && (
+      {votes.length > 0 && (
         <div className="card">
           <h3>Votes</h3>
-          {edit.votes.map((v) => (
+          {votes.map((v) => (
             <p key={v.id}>
               <strong>{v.choice}</strong>
               {v.comment && ` — ${v.comment}`}

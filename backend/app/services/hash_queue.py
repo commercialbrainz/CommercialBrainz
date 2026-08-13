@@ -9,6 +9,7 @@ from uuid import UUID
 from arq import create_pool
 from arq.connections import RedisSettings
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import async_session_factory
@@ -49,15 +50,30 @@ async def enqueue_hash_job(fingerprint_id: UUID) -> None:
         logger.exception("Failed to enqueue hash job %s", fingerprint_id)
 
 
+async def add_preview_fingerprint(
+    db: AsyncSession, edit_id: UUID, youtube_id: str
+) -> MediaFingerprint:
+    """Insert a PREVIEW fingerprint on the caller's session (no commit, no enqueue).
+
+    Must run in the same transaction as the edit insert. A background task that
+    opens a second session will wait forever on the edits FK while the submit
+    request is still uncommitted, which blocks the worker and leaves the edit page
+    stuck on loading.
+    """
+    fp = MediaFingerprint(
+        edit_id=edit_id,
+        youtube_id=youtube_id,
+        phase=FingerprintPhase.PREVIEW,
+        status=FingerprintStatus.PENDING,
+    )
+    db.add(fp)
+    await db.flush()
+    return fp
+
+
 async def create_preview_fingerprint(edit_id: UUID, youtube_id: str) -> MediaFingerprint:
     async with async_session_factory() as db:
-        fp = MediaFingerprint(
-            edit_id=edit_id,
-            youtube_id=youtube_id,
-            phase=FingerprintPhase.PREVIEW,
-            status=FingerprintStatus.PENDING,
-        )
-        db.add(fp)
+        fp = await add_preview_fingerprint(db, edit_id, youtube_id)
         await db.commit()
         await db.refresh(fp)
         fingerprint_id = fp.id

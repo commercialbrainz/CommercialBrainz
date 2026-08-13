@@ -335,6 +335,7 @@ export default function SubmitPage() {
       navigate(`/edits/${edit.id}`, {
         state: {
           justSubmitted: true,
+          edit,
           message:
             "Submitted for community review. It will not appear in the video catalog until the edit is approved.",
         },

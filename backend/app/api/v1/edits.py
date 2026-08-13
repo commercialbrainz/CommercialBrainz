@@ -28,17 +28,13 @@ from app.services.fingerprint_queries import (
     find_all_hash_duplicates_for_fingerprint,
     get_preview_fingerprint,
 )
-from app.services.hash_queue import create_preview_fingerprint, enqueue_hash_job
+from app.services.hash_queue import add_preview_fingerprint, enqueue_hash_job
 from app.services.submission_terms import validate_and_record_terms_acceptance
 from app.services.youtube_metadata import fetch_youtube_metadata
 from app.utils import extract_youtube_id
 
 router = APIRouter(prefix="/edits", tags=["edits"])
 logger = logging.getLogger(__name__)
-
-
-async def _schedule_preview_fingerprint(edit_id: UUID, youtube_id: str) -> None:
-    await create_preview_fingerprint(edit_id, youtube_id)
 
 
 async def _schedule_hash_job(job_id: UUID) -> None:
@@ -87,8 +83,7 @@ async def create_edit(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
     _schedule_pending_hash(background_tasks, edit)
-    await db.refresh(edit, ["votes"])
-    return await build_edit_public(db, edit, editor_username=user.username)
+    return await build_edit_public(db, edit, votes=[], editor_username=user.username)
 
 
 @router.post("/submit-video", response_model=EditPublic, status_code=status.HTTP_201_CREATED)
@@ -127,13 +122,14 @@ async def submit_video(
             raise HTTPException(status_code=404, detail="Commercial not found")
 
     after_state = data.model_dump(
-        exclude={"comment", "force_votable", "commercial", "terms_agreed"}
+        mode="json",
+        exclude={"comment", "force_votable", "commercial", "terms_agreed"},
     )
     after_state["youtube_id"] = youtube_id
     after_state["youtube_url"] = data.youtube_url
 
     if data.commercial:
-        commercial = data.commercial.model_dump()
+        commercial = data.commercial.model_dump(mode="json")
         if data.commercial.products:
             commercial["products"] = data.commercial.products
         if data.commercial.advertiser_id:
@@ -175,10 +171,13 @@ async def submit_video(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
     if edit.status == EditStatus.OPEN:
-        background_tasks.add_task(_schedule_preview_fingerprint, edit.id, youtube_id)
+        # Create the preview row in this transaction, then only enqueue Redis
+        # after the response. A second DB session in a background task deadlocks
+        # on edits.id while this request is still uncommitted.
+        fp = await add_preview_fingerprint(db, edit.id, youtube_id)
+        background_tasks.add_task(_schedule_hash_job, fp.id)
     _schedule_pending_hash(background_tasks, edit)
-    await db.refresh(edit, ["votes"])
-    return await build_edit_public(db, edit, editor_username=user.username)
+    return await build_edit_public(db, edit, votes=[], editor_username=user.username)
 
 
 @router.get("/youtube-metadata", response_model=YouTubeMetadataPreview)
@@ -259,7 +258,14 @@ async def get_edit(edit_id: UUID, db: AsyncSession = Depends(get_db)):
     edit = result.scalar_one_or_none()
     if not edit:
         raise HTTPException(status_code=404, detail="Edit not found")
-    return await build_edit_public(db, edit)
+    try:
+        return await build_edit_public(db, edit)
+    except Exception:
+        logger.exception("Failed to serialize edit %s", edit.id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load edit {edit.id}. Check API logs.",
+        ) from None
 
 
 @router.post("/{edit_id}/vote", response_model=VotePublic)

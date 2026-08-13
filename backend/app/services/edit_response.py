@@ -18,6 +18,15 @@ def _editor_username(edit: Edit) -> str | None:
     return editor.username if editor is not None else None
 
 
+def _loaded_votes(edit: Edit, votes: list[Vote] | None) -> list[Vote]:
+    if votes is not None:
+        return votes
+    insp = sa_inspect(edit)
+    if "votes" in insp.unloaded:
+        return []
+    return list(edit.votes)
+
+
 async def build_edit_public(
     db: AsyncSession,
     edit: Edit,
@@ -25,7 +34,7 @@ async def build_edit_public(
     *,
     editor_username: str | None = None,
 ) -> EditPublic:
-    vote_list = votes if votes is not None else list(edit.votes)
+    vote_list = _loaded_votes(edit, votes)
     fingerprint_preview = None
     if edit.edit_type.value == "create_video":
         fp = await get_preview_fingerprint(db, edit.id)
