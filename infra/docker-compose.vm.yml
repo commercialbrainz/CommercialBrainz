@@ -21,7 +21,7 @@ services:
     restart: unless-stopped
 
   maintenance:
-    image: ghcr.io/binarygeek119/commercialbrainz-maintenance:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:-commercialbrainz}/commercialbrainz-maintenance:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: infra/Dockerfile.maintenance

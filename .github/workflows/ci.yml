@@ -159,7 +159,7 @@ jobs:
       packages: write
     env:
       REGISTRY: ghcr.io
-      IMAGE_OWNER: binarygeek119
+      IMAGE_OWNER: ${{ github.repository_owner }}
     steps:
       - uses: actions/checkout@v7
 
@@ -180,22 +180,23 @@ jobs:
         run: |
           set -euo pipefail
           SHA="${GITHUB_SHA}"
+          OWNER="${IMAGE_OWNER,,}"
           if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
             EXTRA="pr-${{ github.event.number }}"
             write_tags() {
               local name="$1"
               printf '%s\n' \
-                "ghcr.io/binarygeek119/${name}:${SHA}" \
-                "ghcr.io/binarygeek119/${name}:${EXTRA}"
+                "ghcr.io/${OWNER}/${name}:${SHA}" \
+                "ghcr.io/${OWNER}/${name}:${EXTRA}"
             }
           else
             EXTRA="${GITHUB_REF_NAME//\//-}"
             write_tags() {
               local name="$1"
               printf '%s\n' \
-                "ghcr.io/binarygeek119/${name}:${SHA}" \
-                "ghcr.io/binarygeek119/${name}:${EXTRA}" \
-                "ghcr.io/binarygeek119/${name}:latest"
+                "ghcr.io/${OWNER}/${name}:${SHA}" \
+                "ghcr.io/${OWNER}/${name}:${EXTRA}" \
+                "ghcr.io/${OWNER}/${name}:latest"
             }
           fi
           {
@@ -251,8 +252,11 @@ jobs:
           set -euo pipefail
           OWNER="${{ github.repository_owner }}"
           for pkg in commercialbrainz-api commercialbrainz-web commercialbrainz-maintenance; do
-            # Linked packages live under /users/{owner}/packages/...
             if gh api --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "/orgs/${OWNER}/packages/container/${pkg}/visibility" \
+              -f visibility=public \
+              || gh api --method PUT \
               -H "Accept: application/vnd.github+json" \
               "/users/${OWNER}/packages/container/${pkg}/visibility" \
               -f visibility=public; then

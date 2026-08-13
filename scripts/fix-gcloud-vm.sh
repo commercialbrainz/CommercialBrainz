@@ -20,7 +20,7 @@ elif [[ "$APP_BRANCH" == "cloudflare" ]]; then
 fi
 cd "$APP_DIR"
 
-# Narrow env for compose interpolation (IMAGE_TAG/DOMAIN/ACME_EMAIL only).
+# Narrow env for compose interpolation (IMAGE_TAG/GHCR_OWNER/DOMAIN/ACME_EMAIL).
 # Prevents Compose from expanding "$" inside secrets in .env.
 write_compose_env() {
   bash "$APP_DIR/infra/gcloud/write-compose-env.sh" "$APP_DIR"
@@ -187,9 +187,10 @@ MAINT_FLAG="${MAINT_FLAGS_DIR}/UPDATE_IN_PROGRESS"
 
 echo "==> Pull prebuilt images from GHCR"
 # Prefer explicit docker pull so failures are obvious (compose may mask them).
-API_IMAGE="ghcr.io/binarygeek119/commercialbrainz-api:${IMAGE_TAG}"
-WEB_IMAGE="ghcr.io/binarygeek119/commercialbrainz-web:${IMAGE_TAG}"
-MAINT_IMAGE="ghcr.io/binarygeek119/commercialbrainz-maintenance:${IMAGE_TAG}"
+GHCR_OWNER="${GHCR_OWNER:-commercialbrainz}"
+API_IMAGE="ghcr.io/${GHCR_OWNER}/commercialbrainz-api:${IMAGE_TAG}"
+WEB_IMAGE="ghcr.io/${GHCR_OWNER}/commercialbrainz-web:${IMAGE_TAG}"
+MAINT_IMAGE="ghcr.io/${GHCR_OWNER}/commercialbrainz-maintenance:${IMAGE_TAG}"
 if [[ "$(id -u)" -eq 0 ]]; then DOCKER=docker; else DOCKER="sudo docker"; fi
 
 echo "==> Free disk space (unused Docker images/cache; keeps named volumes)"

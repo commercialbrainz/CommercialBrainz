@@ -28,7 +28,7 @@ services:
 
   api:
     # Prebuilt on GitHub Actions → GHCR; local `compose build` still works.
-    image: ghcr.io/binarygeek119/commercialbrainz-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:-commercialbrainz}/commercialbrainz-api:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: infra/Dockerfile.api
@@ -59,7 +59,7 @@ services:
       start_period: 120s
 
   worker:
-    image: ghcr.io/binarygeek119/commercialbrainz-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:-commercialbrainz}/commercialbrainz-api:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: infra/Dockerfile.api
@@ -82,7 +82,7 @@ services:
     command: ["worker"]
 
   web:
-    image: ghcr.io/binarygeek119/commercialbrainz-web:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GHCR_OWNER:-commercialbrainz}/commercialbrainz-web:${IMAGE_TAG:-latest}
     build:
       context: ..
       dockerfile: infra/Dockerfile.web
