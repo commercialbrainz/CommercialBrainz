@@ -1,6 +1,6 @@
 [project]
 name = "commercialbrainz"
-version = "1.0.45"
+version = "1.0.46"
 description = "CommercialBrainz — open commercial video database"
 readme = "README.md"
 requires-python = ">=3.12"
